@@ -444,7 +444,7 @@ button {
   gap: 10px;
 }
 .sync-row input { flex: 1 1 180px; min-width: 0; }
-input[type="password"] {
+.sync-row input[type="text"] {
   font: inherit;
   font-size: 15px;
   color: var(--ink);
@@ -536,7 +536,7 @@ input[type="password"] {
     <div class="card">
       <p>PCとスマホで同じノートを見るための「あいことば」。どの端末でも同じものを入れてね。</p>
       <form class="sync-row" id="sync-form">
-        <input type="password" id="sync-key" autocomplete="off" placeholder="あいことば" aria-label="あいことば">
+        <input type="text" id="sync-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="あいことば（ひらがなでもOK）" aria-label="あいことば">
         <button type="submit" class="primary">つなぐ</button>
       </form>
     </div>
