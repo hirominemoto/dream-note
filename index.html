@@ -401,6 +401,59 @@ button {
 }
 .empty[hidden] { display: none; }
 
+/* Sync */
+.sync-status {
+  margin: 12px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.sync-status::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: var(--muted);
+  opacity: 0.6;
+}
+.sync-status[data-state="ok"]::before { background: var(--glow); opacity: 1; box-shadow: 0 0 6px var(--glow); }
+.sync-status[data-state="busy"]::before { background: var(--accent); opacity: 1; }
+.sync-status[data-state="err"] { color: var(--alert); }
+.sync-status[data-state="err"]::before { background: var(--alert); opacity: 1; }
+
+.sync-box {
+  margin-top: 44px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.sync-box summary {
+  cursor: pointer;
+  width: fit-content;
+  margin: 0 auto;
+  letter-spacing: 0.04em;
+}
+.sync-box summary:hover { color: var(--ink); }
+.sync-box .card { margin-top: 14px; }
+.sync-box p { margin: 0 0 12px; }
+.sync-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.sync-row input { flex: 1 1 180px; min-width: 0; }
+input[type="password"] {
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 9px 13px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
@@ -422,6 +475,7 @@ button {
     <p class="kicker">DREAM LOG</p>
     <h1>夢のノート</h1>
     <p class="lede">目が覚めて残っている断片を、そのまま置いておく場所。</p>
+    <p class="sync-status" id="sync-status" role="status"></p>
   </header>
 
   <section class="card" aria-labelledby="compose-title">
@@ -476,12 +530,35 @@ button {
 
   <ul class="entries" id="list"></ul>
   <p class="empty" id="empty" hidden></p>
+
+  <details class="sync-box" id="sync-box">
+    <summary>同期の設定</summary>
+    <div class="card">
+      <p>PCとスマホで同じノートを見るための「あいことば」。どの端末でも同じものを入れてね。</p>
+      <form class="sync-row" id="sync-form">
+        <input type="password" id="sync-key" autocomplete="off" placeholder="あいことば" aria-label="あいことば">
+        <button type="submit" class="primary">つなぐ</button>
+      </form>
+    </div>
+  </details>
 </main>
 
 <script>
 (function () {
   var KEY = 'dream-journal-v1';
+  var DEL_KEY = 'dream-pending-delete-v1';
+  var SYNC_KEY = 'dream-sync-key-v1';
+  // 保管庫の場所。Netlifyで開いたときは同じ場所にあるので空でOK。
+  // GitHub Pagesで開いたときは、ここに書いたNetlifyのアドレスへ見に行く（例：'https://xxxx.netlify.app'）。
+  var NETLIFY_URL = '';
+  var ON_PAGES = /\.github\.io$/.test(location.hostname);
+  var API_BASE = ON_PAGES ? NETLIFY_URL : '';
+  var CAN_SYNC = !ON_PAGES || !!NETLIFY_URL;
   var dreams = load();
+  var pendingDel = loadList(DEL_KEY);
+  var syncKey = loadText(SYNC_KEY);
+  var syncing = false;
+  var again = false;
   var $ = function (s) { return document.querySelector(s); };
 
   function load() {
@@ -496,10 +573,87 @@ button {
   function save() {
     try {
       localStorage.setItem(KEY, JSON.stringify(dreams));
+      localStorage.setItem(DEL_KEY, JSON.stringify(pendingDel));
       return true;
     } catch (e) {
       return false;
     }
+  }
+
+  function loadList(k) {
+    try {
+      var v = JSON.parse(localStorage.getItem(k));
+      return Array.isArray(v) ? v : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function loadText(k) {
+    try { return localStorage.getItem(k) || ''; } catch (e) { return ''; }
+  }
+
+  function hhmm() {
+    var d = new Date();
+    return pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function setStatus(state, text) {
+    var el = $('#sync-status');
+    el.setAttribute('data-state', state);
+    el.textContent = text;
+  }
+
+  // 手元のノートと保管庫を突き合わせる。
+  // 手元にしかない夢は送り、消した夢は「消した」と伝え、返ってきた全体を手元に写す。
+  function sync() {
+    if (!CAN_SYNC) {
+      setStatus('off', 'この端末だけに保存しています');
+      return;
+    }
+    if (!syncKey) {
+      setStatus('off', 'この端末だけに保存しています（下の「同期の設定」でつなげられます）');
+      return;
+    }
+    if (syncing) { again = true; return; }
+    syncing = true;
+    setStatus('busy', '同期しています…');
+    fetch(API_BASE + '/api/dreams', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-dream-key': encodeURIComponent(syncKey) },
+      body: JSON.stringify({ upsert: dreams, delete: pendingDel })
+    })
+      .then(function (r) {
+        if (r.status === 401) throw new Error('key');
+        if (!r.ok) throw new Error('server');
+        return r.json();
+      })
+      .then(function (data) {
+        var sentDel = pendingDel.slice();
+        // 送っている間に増えた夢・消した夢は手元に残しておき、次の同期で送る
+        var serverIds = {};
+        data.dreams.forEach(function (d) { serverIds[d.id] = true; });
+        var gone = {};
+        data.deleted.forEach(function (id) { gone[id] = true; });
+        var localOnly = dreams.filter(function (d) { return !serverIds[d.id] && !gone[d.id]; });
+        pendingDel = pendingDel.filter(function (id) { return sentDel.indexOf(id) === -1; });
+        dreams = data.dreams.concat(localOnly).filter(function (d) { return pendingDel.indexOf(d.id) === -1; });
+        save();
+        render();
+        setStatus('ok', '同期しました（' + hhmm() + '）');
+        if (localOnly.length || pendingDel.length) again = true;
+      })
+      .catch(function (e) {
+        if (e.message === 'key') {
+          setStatus('err', 'あいことばが違うみたい。下の「同期の設定」から入れ直してね');
+        } else {
+          setStatus('err', 'いまは送れませんでした。この端末には残っているので、次に開いたとき送ります');
+        }
+      })
+      .then(function () {
+        syncing = false;
+        if (again) { again = false; setTimeout(sync, 300); }
+      });
   }
 
   function pad(n) { return String(n).padStart(2, '0'); }
@@ -569,6 +723,7 @@ button {
     }
     resetForm();
     render();
+    sync();
   });
 
   $('#f-clear').addEventListener('click', resetForm);
@@ -581,8 +736,10 @@ button {
     if (btn.hasAttribute('data-armed')) {
       var id = btn.getAttribute('data-id');
       dreams = dreams.filter(function (d) { return d.id !== id; });
+      if (pendingDel.indexOf(id) === -1) pendingDel.push(id);
       save();
       render();
+      sync();
       return;
     }
     btn.setAttribute('data-armed', '');
@@ -664,8 +821,27 @@ button {
     }
   }
 
+  $('#sync-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    syncKey = $('#sync-key').value.trim();
+    try {
+      if (syncKey) localStorage.setItem(SYNC_KEY, syncKey);
+      else localStorage.removeItem(SYNC_KEY);
+    } catch (err) {}
+    $('#sync-key').value = '';
+    $('#sync-box').open = false;
+    sync();
+  });
+
+  // スマホでアプリを切り替えて戻ってきたときや、電波が戻ったときにも同期する
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') sync();
+  });
+  window.addEventListener('online', sync);
+
   $('#f-date').value = todayStr();
   render();
+  sync();
 })();
 </script>
 
