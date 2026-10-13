@@ -1,0 +1,672 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>夢のノート</title>
+<style>
+/* Layout: one quiet column of soft glass slips, like pages of a notebook kept by the bedside.
+   Palette: pale dawn lilac (light) and midnight indigo with moonlit rose (dark). */
+:root {
+  color-scheme: light;
+  --bg: #f2effa;
+  --ink: #2c2943;
+  --muted: #776f94;
+  --accent: #7a5ca6;
+  --accent-ink: #ffffff;
+  --glow: #e2bd6a;
+  --alert: #b04a6a;
+  --haze: rgba(196, 170, 226, 0.38);
+  --haze-2: rgba(246, 214, 170, 0.30);
+  --card: rgba(255, 255, 255, 0.62);
+  --field: rgba(255, 255, 255, 0.85);
+  --line: rgba(70, 58, 110, 0.14);
+  --shadow: 0 18px 40px -28px rgba(60, 40, 110, 0.35);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1c1d34;
+    --ink: #ebe7f6;
+    --muted: #a19cc0;
+    --accent: #c7a6e8;
+    --accent-ink: #1c1d34;
+    --glow: #f1d88f;
+    --alert: #f0a2b8;
+    --haze: rgba(120, 96, 170, 0.34);
+    --haze-2: rgba(214, 170, 110, 0.16);
+    --card: rgba(255, 255, 255, 0.055);
+    --field: rgba(255, 255, 255, 0.07);
+    --line: rgba(255, 255, 255, 0.11);
+    --shadow: 0 18px 40px -26px rgba(0, 0, 0, 0.6);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1c1d34;
+  --ink: #ebe7f6;
+  --muted: #a19cc0;
+  --accent: #c7a6e8;
+  --accent-ink: #1c1d34;
+  --glow: #f1d88f;
+  --alert: #f0a2b8;
+  --haze: rgba(120, 96, 170, 0.34);
+  --haze-2: rgba(214, 170, 110, 0.16);
+  --card: rgba(255, 255, 255, 0.055);
+  --field: rgba(255, 255, 255, 0.07);
+  --line: rgba(255, 255, 255, 0.11);
+  --shadow: 0 18px 40px -26px rgba(0, 0, 0, 0.6);
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Meiryo, "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", sans-serif;
+  font-size: 15px;
+  line-height: 1.85;
+}
+/* Soft haze behind everything, and a few faint stars. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 45% at 12% 0%, var(--haze), transparent 70%),
+    radial-gradient(50% 40% at 100% 22%, var(--haze-2), transparent 70%);
+}
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image:
+    radial-gradient(1.5px 1.5px at 8% 18%, var(--glow), transparent),
+    radial-gradient(1px 1px at 27% 62%, var(--ink), transparent),
+    radial-gradient(1.5px 1.5px at 61% 9%, var(--glow), transparent),
+    radial-gradient(1px 1px at 84% 44%, var(--ink), transparent),
+    radial-gradient(1px 1px at 46% 86%, var(--glow), transparent),
+    radial-gradient(1px 1px at 93% 88%, var(--ink), transparent);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+.wrap {
+  max-width: 680px;
+  margin: 0 auto;
+  padding-block: 44px 96px;
+  padding-inline: 18px;
+}
+
+/* Header */
+.top {
+  text-align: center;
+  margin-bottom: 30px;
+}
+.moon {
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fffaf0, var(--glow) 70%);
+  box-shadow: 0 0 28px 4px color-mix(in srgb, var(--glow) 35%, transparent);
+}
+.sky {
+  position: relative;
+  width: min(240px, 100%);
+  height: 130px;
+  margin: 0 auto 10px;
+}
+.sky .moon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin: 0;
+  transform: translate(-50%, -50%);
+}
+.star {
+  position: absolute;
+  background: var(--glow);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  filter: drop-shadow(0 0 3px var(--glow));
+  opacity: 0.4;
+  animation: twinkle 2.8s ease-in-out infinite;
+}
+.star:nth-child(2n) { animation-delay: -1.2s; }
+.star:nth-child(3n) { animation-delay: -2.1s; }
+.star:nth-child(5n) { animation-delay: -0.6s; }
+@keyframes twinkle {
+  0%, 100% { opacity: 0.35; transform: scale(0.8) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.1) rotate(18deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .star { animation: none; opacity: 0.8; }
+}
+
+.kicker {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+}
+h1 {
+  margin: 4px 0 6px;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-wrap: balance;
+}
+.lede {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  text-wrap: balance;
+}
+
+/* Surfaces */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 22px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+h2 {
+  margin: 0 0 14px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* Form */
+form { display: grid; gap: 16px; }
+.field { display: grid; gap: 6px; min-width: 0; }
+.field > span {
+  font-size: 13px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+.row > * { min-width: 0; }
+input[type="text"],
+input[type="date"],
+input[type="search"],
+textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 13px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+textarea {
+  resize: vertical;
+  min-height: 140px;
+  line-height: 1.85;
+}
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.75; }
+input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+input:focus-visible, textarea:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Feeling chips */
+.tags {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.tags legend {
+  font-size: 13px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  padding: 0;
+  margin-bottom: 8px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip { position: relative; cursor: pointer; }
+.chip input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+.chip span {
+  display: inline-block;
+  padding: 5px 14px;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+.chip:hover span { border-color: var(--accent); }
+.chip input:checked + span {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.error {
+  margin: 0;
+  font-size: 14px;
+  color: var(--alert);
+}
+.error[hidden] { display: none; }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+button {
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 999px;
+  padding: 9px 20px;
+  transition: filter 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 0;
+  font-weight: 700;
+  padding: 10px 26px;
+}
+.primary:hover { filter: brightness(1.06); }
+.ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.ghost:hover { color: var(--ink); border-color: var(--accent); }
+
+/* List head */
+.list-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 44px 4px 16px;
+}
+.list-head h2 { margin: 0; }
+.count {
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--muted);
+  margin-left: 4px;
+}
+#search {
+  width: min(100%, 240px);
+  font-size: 14px;
+  padding: 8px 14px;
+}
+
+/* Entries */
+.entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.entry {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px 20px 14px;
+  min-width: 0;
+}
+.entry-head { display: grid; gap: 2px; min-width: 0; }
+.date {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.body {
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.people {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.pill {
+  font-size: 12px;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 999px;
+  padding: 1px 10px;
+}
+.entry-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.del {
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+.del:hover, .del[data-armed] { color: var(--alert); }
+
+.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 36px 16px;
+  border: 1px dashed var(--line);
+  border-radius: 18px;
+  margin: 0;
+  text-wrap: balance;
+}
+.empty[hidden] { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+</style>
+
+<main class="wrap">
+  <header class="top">
+    <div class="sky" aria-hidden="true">
+      <div class="moon"></div>
+      <span class="star" style="left:4%;top:22%;width:8px;height:8px"></span>
+      <span class="star" style="left:14%;top:72%;width:5px;height:5px"></span>
+      <span class="star" style="left:26%;top:6%;width:6px;height:6px"></span>
+      <span class="star" style="left:72%;top:4%;width:5px;height:5px"></span>
+      <span class="star" style="left:86%;top:34%;width:9px;height:9px"></span>
+      <span class="star" style="left:92%;top:78%;width:5px;height:5px"></span>
+      <span class="star" style="left:60%;top:86%;width:7px;height:7px"></span>
+      <span class="star" style="left:38%;top:92%;width:4px;height:4px"></span>
+    </div>
+    <p class="kicker">DREAM LOG</p>
+    <h1>夢のノート</h1>
+    <p class="lede">目が覚めて残っている断片を、そのまま置いておく場所。</p>
+  </header>
+
+  <section class="card" aria-labelledby="compose-title">
+    <h2 id="compose-title">いまの夢を書く</h2>
+    <form id="form" novalidate>
+      <div class="row">
+        <label class="field">
+          <span>見た日</span>
+          <input type="date" id="f-date" required>
+        </label>
+        <label class="field">
+          <span>タイトル（なくてもいい）</span>
+          <input type="text" id="f-title" maxlength="60" placeholder="例：白い傘の駅">
+        </label>
+      </div>
+
+      <label class="field">
+        <span>夢の内容</span>
+        <textarea id="f-body" placeholder="場面、色、におい。順番がばらばらでもいいよ。"></textarea>
+      </label>
+
+      <label class="field">
+        <span>出てきた人</span>
+        <input type="text" id="f-people" placeholder="名前でも、雰囲気でもいい">
+      </label>
+
+      <fieldset class="tags">
+        <legend>目が覚めたときに残っている感じ</legend>
+        <div class="chips">
+          <label class="chip"><input type="checkbox" value="鮮明"><span>鮮明</span></label>
+          <label class="chip"><input type="checkbox" value="ぼんやり"><span>ぼんやり</span></label>
+          <label class="chip"><input type="checkbox" value="こわい"><span>こわい</span></label>
+          <label class="chip"><input type="checkbox" value="なつかしい"><span>なつかしい</span></label>
+          <label class="chip"><input type="checkbox" value="うれしい"><span>うれしい</span></label>
+          <label class="chip"><input type="checkbox" value="不思議"><span>不思議</span></label>
+        </div>
+      </fieldset>
+
+      <p class="error" id="f-error" role="alert" hidden></p>
+
+      <div class="actions">
+        <button type="button" id="f-clear" class="ghost">クリア</button>
+        <button type="submit" class="primary">書き留める</button>
+      </div>
+    </form>
+  </section>
+
+  <div class="list-head">
+    <h2>これまでの夢 <span class="count" id="count"></span></h2>
+    <input type="search" id="search" placeholder="言葉で探す" aria-label="夢を探す">
+  </div>
+
+  <ul class="entries" id="list"></ul>
+  <p class="empty" id="empty" hidden></p>
+</main>
+
+<script>
+(function () {
+  var KEY = 'dream-journal-v1';
+  var dreams = load();
+  var $ = function (s) { return document.querySelector(s); };
+
+  function load() {
+    try {
+      var v = JSON.parse(localStorage.getItem(KEY));
+      return Array.isArray(v) ? v : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(dreams));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  function todayStr() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  function fmtDate(s) {
+    var p = s.split('-').map(Number);
+    var dt = new Date(p[0], p[1] - 1, p[2]);
+    return dt.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+  }
+
+  function showError(msg) {
+    var el = $('#f-error');
+    el.textContent = msg;
+    el.hidden = false;
+  }
+
+  function clearError() {
+    var el = $('#f-error');
+    el.textContent = '';
+    el.hidden = true;
+  }
+
+  function resetForm() {
+    $('#form').reset();
+    $('#f-date').value = todayStr();
+    clearError();
+  }
+
+  $('#form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    clearError();
+    var date = $('#f-date').value;
+    var body = $('#f-body').value.trim();
+    if (!date) {
+      showError('見た日を入れてね。');
+      $('#f-date').focus();
+      return;
+    }
+    if (!body) {
+      showError('夢の内容を少しだけでも書いてみてね。');
+      $('#f-body').focus();
+      return;
+    }
+    var tags = Array.prototype.map.call(
+      document.querySelectorAll('.chip input:checked'),
+      function (i) { return i.value; }
+    );
+    var dream = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      date: date,
+      title: $('#f-title').value.trim(),
+      body: body,
+      people: $('#f-people').value.trim(),
+      tags: tags,
+      created: Date.now()
+    };
+    dreams.push(dream);
+    if (!save()) {
+      dreams.pop();
+      showError('保存できませんでした。もう一度試してみてね。');
+      return;
+    }
+    resetForm();
+    render();
+  });
+
+  $('#f-clear').addEventListener('click', resetForm);
+
+  $('#search').addEventListener('input', render);
+
+  $('#list').addEventListener('click', function (e) {
+    var btn = e.target.closest('.del');
+    if (!btn) return;
+    if (btn.hasAttribute('data-armed')) {
+      var id = btn.getAttribute('data-id');
+      dreams = dreams.filter(function (d) { return d.id !== id; });
+      save();
+      render();
+      return;
+    }
+    btn.setAttribute('data-armed', '');
+    btn.textContent = 'やっぱり消す';
+    setTimeout(function () {
+      if (btn.isConnected) {
+        btn.removeAttribute('data-armed');
+        btn.textContent = '消す';
+      }
+    }, 3500);
+  });
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function buildEntry(d) {
+    var li = el('li', 'entry');
+    var head = el('div', 'entry-head');
+    head.appendChild(el('p', 'date', fmtDate(d.date)));
+    if (d.title) head.appendChild(el('h3', 'title', d.title));
+    li.appendChild(head);
+
+    li.appendChild(el('p', 'body', d.body));
+
+    if (d.people) {
+      var p = el('p', 'people', '出てきた人：' + d.people);
+      li.appendChild(p);
+    }
+
+    var tags = d.tags || [];
+    if (tags.length) {
+      var pills = el('div', 'pills');
+      tags.forEach(function (t) { pills.appendChild(el('span', 'pill', t)); });
+      li.appendChild(pills);
+    }
+
+    var foot = el('div', 'entry-foot');
+    var del = el('button', 'del', '消す');
+    del.type = 'button';
+    del.setAttribute('data-id', d.id);
+    foot.appendChild(del);
+    li.appendChild(foot);
+    return li;
+  }
+
+  function render() {
+    var q = $('#search').value.trim().toLowerCase();
+    var list = dreams
+      .filter(function (d) {
+        if (!q) return true;
+        var hay = [d.title, d.body, d.people, (d.tags || []).join(' ')].join(' ').toLowerCase();
+        return hay.indexOf(q) !== -1;
+      })
+      .sort(function (a, b) {
+        return b.date.localeCompare(a.date) || (b.created - a.created);
+      });
+
+    var ul = $('#list');
+    ul.textContent = '';
+    list.forEach(function (d) { ul.appendChild(buildEntry(d)); });
+
+    $('#count').textContent = q
+      ? '（' + list.length + ' / ' + dreams.length + '件）'
+      : (dreams.length ? '（' + dreams.length + '件）' : '');
+
+    var empty = $('#empty');
+    if (dreams.length === 0) {
+      empty.textContent = 'まだ夢は書かれていません。目が覚めて、いちばん残っている場面から書いてみてね。';
+      empty.hidden = false;
+    } else if (list.length === 0) {
+      empty.textContent = '見つからなかったよ。別の言葉で探してみて。';
+      empty.hidden = false;
+    } else {
+      empty.hidden = true;
+    }
+  }
+
+  $('#f-date').value = todayStr();
+  render();
+})();
+</script>
+
+</body></html>
