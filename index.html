@@ -379,16 +379,22 @@ button {
 .entry-foot {
   display: flex;
   justify-content: flex-end;
+  gap: 4px;
   margin-top: 8px;
 }
-.del {
+.entry-foot button {
   background: transparent;
   color: var(--muted);
   border: 0;
   padding: 4px 8px;
   font-size: 13px;
 }
+.edit:hover { color: var(--accent); }
 .del:hover, .del[data-armed] { color: var(--alert); }
+.entry.editing {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  padding-bottom: 18px;
+}
 
 .empty {
   text-align: center;
@@ -531,6 +537,35 @@ button {
   <ul class="entries" id="list"></ul>
   <p class="empty" id="empty" hidden></p>
 
+  <!-- 書いた夢を、その場で書き直すための欄。感じのチップは「いまの夢を書く」から写して入れる -->
+  <template id="edit-tpl">
+    <form class="edit-form" novalidate aria-label="夢を書き直す">
+      <div class="row">
+        <label class="field">
+          <span>見た日</span>
+          <input type="date" name="date" required>
+        </label>
+        <label class="field">
+          <span>タイトル（なくてもいい）</span>
+          <input type="text" name="title" maxlength="60">
+        </label>
+      </div>
+      <label class="field">
+        <span>夢の内容</span>
+        <textarea name="body"></textarea>
+      </label>
+      <label class="field">
+        <span>出てきた人</span>
+        <input type="text" name="people">
+      </label>
+      <p class="error" role="alert" hidden></p>
+      <div class="actions">
+        <button type="button" class="ghost" data-act="cancel">やめる</button>
+        <button type="submit" class="primary">書き直す</button>
+      </div>
+    </form>
+  </template>
+
   <details class="sync-box" id="sync-box">
     <summary>同期の設定</summary>
     <div class="card">
@@ -559,7 +594,16 @@ button {
   var syncKey = loadText(SYNC_KEY);
   var syncing = false;
   var again = false;
+  var editors = {}; // 書き直している途中の欄（夢の id → 欄）
   var $ = function (s) { return document.querySelector(s); };
+
+  // 夢がいつの版かを表す。書き直していない夢は updated を持たないので、書いた時刻で比べる
+  function stamp(d) { return Number(d.updated || d.created) || 0; }
+
+  function find(id) {
+    for (var i = 0; i < dreams.length; i++) if (dreams[i].id === id) return i;
+    return -1;
+  }
 
   function load() {
     try {
@@ -636,12 +680,21 @@ button {
         var gone = {};
         data.deleted.forEach(function (id) { gone[id] = true; });
         var localOnly = dreams.filter(function (d) { return !serverIds[d.id] && !gone[d.id]; });
+        // 送っている間に手元で書き直した夢は、手元の版を残しておき、次の同期で送る
+        var mine = {};
+        dreams.forEach(function (d) { mine[d.id] = d; });
+        var newer = false;
+        var fromServer = data.dreams.map(function (d) {
+          var m = mine[d.id];
+          if (m && stamp(m) > stamp(d)) { newer = true; return m; }
+          return d;
+        });
         pendingDel = pendingDel.filter(function (id) { return sentDel.indexOf(id) === -1; });
-        dreams = data.dreams.concat(localOnly).filter(function (d) { return pendingDel.indexOf(d.id) === -1; });
+        dreams = fromServer.concat(localOnly).filter(function (d) { return pendingDel.indexOf(d.id) === -1; });
         save();
         render();
         setStatus('ok', '同期しました（' + hhmm() + '）');
-        if (localOnly.length || pendingDel.length) again = true;
+        if (localOnly.length || pendingDel.length || newer) again = true;
       })
       .catch(function (e) {
         if (e.message === 'key') {
@@ -669,14 +722,14 @@ button {
     return dt.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
   }
 
-  function showError(msg) {
-    var el = $('#f-error');
+  function showError(msg, box) {
+    var el = box || $('#f-error');
     el.textContent = msg;
     el.hidden = false;
   }
 
-  function clearError() {
-    var el = $('#f-error');
+  function clearError(box) {
+    var el = box || $('#f-error');
     el.textContent = '';
     el.hidden = true;
   }
@@ -702,10 +755,7 @@ button {
       $('#f-body').focus();
       return;
     }
-    var tags = Array.prototype.map.call(
-      document.querySelectorAll('.chip input:checked'),
-      function (i) { return i.value; }
-    );
+    var tags = checkedTags($('#form'));
     var dream = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
       date: date,
@@ -726,11 +776,82 @@ button {
     sync();
   });
 
+  function checkedTags(form) {
+    return Array.prototype.map.call(
+      form.querySelectorAll('.chip input:checked'),
+      function (i) { return i.value; }
+    );
+  }
+
   $('#f-clear').addEventListener('click', resetForm);
 
   $('#search').addEventListener('input', render);
 
+  function closeEditor(id) {
+    delete editors[id];
+    render();
+    var btn = $('#list .edit[data-id="' + CSS.escape(id) + '"]');
+    if (btn) btn.focus();
+  }
+
+  // 書き直した夢を手元に保存して、保管庫へ送る
+  $('#list').addEventListener('submit', function (e) {
+    var form = e.target;
+    if (!form.classList.contains('edit-form')) return;
+    e.preventDefault();
+    var box = form.querySelector('.error');
+    clearError(box);
+    var f = form.elements;
+    var id = form.closest('li').getAttribute('data-id');
+    var date = f.date.value;
+    var body = f.body.value.trim();
+    if (!date) {
+      showError('見た日を入れてね。', box);
+      f.date.focus();
+      return;
+    }
+    if (!body) {
+      showError('夢の内容を少しだけでも書いてみてね。', box);
+      f.body.focus();
+      return;
+    }
+    var i = find(id);
+    if (i === -1) { closeEditor(id); return; }
+    var before = dreams[i];
+    dreams[i] = Object.assign({}, before, {
+      date: date,
+      title: f.title.value.trim(),
+      body: body,
+      people: f.people.value.trim(),
+      tags: checkedTags(form),
+      updated: Date.now()
+    });
+    if (!save()) {
+      dreams[i] = before;
+      showError('保存できませんでした。もう一度試してみてね。', box);
+      return;
+    }
+    closeEditor(id);
+    sync();
+  });
+
   $('#list').addEventListener('click', function (e) {
+    var edit = e.target.closest('.edit');
+    if (edit) {
+      var id = edit.getAttribute('data-id');
+      var i = find(id);
+      if (i === -1) return;
+      var li = buildEditor(dreams[i]);
+      editors[id] = li;
+      edit.closest('li').replaceWith(li);
+      li.querySelector('textarea').focus();
+      return;
+    }
+    var cancel = e.target.closest('[data-act="cancel"]');
+    if (cancel) {
+      closeEditor(cancel.closest('li').getAttribute('data-id'));
+      return;
+    }
     var btn = e.target.closest('.del');
     if (!btn) return;
     if (btn.hasAttribute('data-armed')) {
@@ -781,6 +902,10 @@ button {
     }
 
     var foot = el('div', 'entry-foot');
+    var edit = el('button', 'edit', '直す');
+    edit.type = 'button';
+    edit.setAttribute('data-id', d.id);
+    foot.appendChild(edit);
     var del = el('button', 'del', '消す');
     del.type = 'button';
     del.setAttribute('data-id', d.id);
@@ -789,11 +914,33 @@ button {
     return li;
   }
 
+  function buildEditor(d) {
+    var li = el('li', 'entry editing');
+    li.setAttribute('data-id', d.id);
+    var form = $('#edit-tpl').content.firstElementChild.cloneNode(true);
+    var tags = $('#form .tags').cloneNode(true);
+    tags.querySelectorAll('input').forEach(function (i) {
+      i.checked = (d.tags || []).indexOf(i.value) !== -1;
+    });
+    form.insertBefore(tags, form.querySelector('.error'));
+    var f = form.elements;
+    f.date.value = d.date;
+    f.title.value = d.title || '';
+    f.body.value = d.body;
+    f.people.value = d.people || '';
+    li.appendChild(form);
+    return li;
+  }
+
   function render() {
     var q = $('#search').value.trim().toLowerCase();
+    // 書き直している途中に別の端末で消された夢は、欄を閉じる
+    Object.keys(editors).forEach(function (id) {
+      if (find(id) === -1) delete editors[id];
+    });
     var list = dreams
       .filter(function (d) {
-        if (!q) return true;
+        if (!q || editors[d.id]) return true;
         var hay = [d.title, d.body, d.people, (d.tags || []).join(' ')].join(' ').toLowerCase();
         return hay.indexOf(q) !== -1;
       })
@@ -801,9 +948,27 @@ button {
         return b.date.localeCompare(a.date) || (b.created - a.created);
       });
 
+    // 書き直している途中の欄は動かさずに残し、そのまわりだけ作り直す
+    // （作り直すと、同期のたびに打ちかけの文字やスマホのキーボードが消えてしまうので）
     var ul = $('#list');
-    ul.textContent = '';
-    list.forEach(function (d) { ul.appendChild(buildEntry(d)); });
+    // 「直す」「消す」にカーソルがあったら、作り直したあとも同じボタンに戻す
+    var was = document.activeElement;
+    var back = was && was.matches('#list .entry-foot button')
+      ? '.' + was.className + '[data-id="' + CSS.escape(was.getAttribute('data-id')) + '"]'
+      : null;
+    Array.prototype.slice.call(ul.children).forEach(function (n) {
+      if (editors[n.getAttribute('data-id')] !== n) ul.removeChild(n);
+    });
+    var at = ul.firstChild;
+    list.forEach(function (d) {
+      var kept = editors[d.id];
+      if (kept) { at = kept.nextSibling; return; }
+      ul.insertBefore(buildEntry(d), at);
+    });
+    if (back) {
+      var btn = ul.querySelector(back);
+      if (btn) btn.focus({ preventScroll: true });
+    }
 
     $('#count').textContent = q
       ? '（' + list.length + ' / ' + dreams.length + '件）'

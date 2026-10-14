@@ -44,11 +44,14 @@ export default async (req) => {
     if (typeof id === "string") deleted.add(id);
   }
 
-  // 新しく届いた夢を足す（同じ id がもうあれば、そのまま）
+  // 新しく届いた夢を足す。同じ id がもうあれば、あとから書き直されたほうを残す
+  // （書き直していない夢は updated を持たないので、書いた時刻で比べる）
+  const stamp = (d) => Number(d.updated || d.created) || 0;
   const byId = new Map(data.dreams.map((d) => [d.id, d]));
   for (const d of Array.isArray(body.upsert) ? body.upsert : []) {
     if (!d || typeof d.id !== "string" || typeof d.body !== "string") continue;
-    if (!byId.has(d.id)) byId.set(d.id, d);
+    const cur = byId.get(d.id);
+    if (!cur || stamp(d) > stamp(cur)) byId.set(d.id, d);
   }
   for (const id of deleted) byId.delete(id);
 
