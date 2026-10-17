@@ -698,7 +698,9 @@ button {
         dreams = fromServer.concat(localOnly).filter(function (d) { return pendingDel.indexOf(d.id) === -1; });
         save();
         render();
-        setStatus('ok', '同期しました（' + hhmm() + '）');
+        var gh = data.github === 'saved' ? '・GitHubにも保存'
+          : data.github === 'error' ? '・GitHubへの保存は次に試します' : '';
+        setStatus('ok', '同期しました' + gh + '（' + hhmm() + '）');
         if (localOnly.length || pendingDel.length || newer) again = true;
       })
       .catch(function (e) {
@@ -808,8 +810,8 @@ button {
     var ordered = dreams.slice().sort(function (a, b) {
       return (a.date || '').localeCompare(b.date || '') || (a.created || 0) - (b.created || 0);
     });
-    var contents = ['# 夢のノート', '', '全' + ordered.length + '件', '']
-      .concat(ordered.map(markdownText)).join('\n\n---\n\n');
+    var contents = '# 夢のノート\n\n全' + ordered.length + '件\n\n---\n\n' +
+      ordered.map(markdownText).join('\n\n---\n\n');
     var blob = new Blob(['\uFEFF', contents, '\n'], { type: 'text/markdown;charset=utf-8' });
     var url = URL.createObjectURL(blob);
     var link = document.createElement('a');
