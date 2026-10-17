@@ -324,6 +324,10 @@ button {
   padding: 8px 14px;
 }
 
+/* Export and search controls */
+.list-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.list-tools #search { flex: 1 1 170px; }
+
 /* Entries */
 .entries {
   list-style: none;
@@ -531,7 +535,8 @@ button {
 
   <div class="list-head">
     <h2>これまでの夢 <span class="count" id="count"></span></h2>
-    <input type="search" id="search" placeholder="言葉で探す" aria-label="夢を探す">
+    <div class="list-tools"><button type="button" id="export-md" class="ghost">Markdownで書き出す</button>
+    <input type="search" id="search" placeholder="言葉で探す" aria-label="夢を探す"></div>
   </div>
 
   <ul class="entries" id="list"></ul>
@@ -784,6 +789,37 @@ button {
   }
 
   $('#f-clear').addEventListener('click', resetForm);
+
+  // 全件をMarkdownとして手元に書き出す。検索条件や同期状態は変更しない。
+  function markdownText(d) {
+    var title = String(d.title || 'タイトルなし').replace(/\r?\n/g, ' ');
+    var lines = ['# ' + title, '', '見た日：' + (d.date || '不明')];
+    if (d.people) lines.push('登場人物：' + d.people);
+    if (Array.isArray(d.tags) && d.tags.length) lines.push('気分：' + d.tags.join('、'));
+    lines.push('', '## 夢の内容', '', String(d.body || ''));
+    return lines.join('\n');
+  }
+
+  $('#export-md').addEventListener('click', function () {
+    if (!dreams.length) {
+      alert('まだ書き出す夢がないよ。');
+      return;
+    }
+    var ordered = dreams.slice().sort(function (a, b) {
+      return (a.date || '').localeCompare(b.date || '') || (a.created || 0) - (b.created || 0);
+    });
+    var contents = ['# 夢のノート', '', '全' + ordered.length + '件', '']
+      .concat(ordered.map(markdownText)).join('\n\n---\n\n');
+    var blob = new Blob(['\uFEFF', contents, '\n'], { type: 'text/markdown;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'dream-note-' + todayStr() + '.md';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
 
   $('#search').addEventListener('input', render);
 
