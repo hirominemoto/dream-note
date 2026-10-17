@@ -1,6 +1,7 @@
 // 夢のノートの保管庫。PCとスマホが同じノートを見るための窓口。
 // 夢そのものは Netlify Blobs に1つのファイル（dreams）として置いておく。
 // 読み書きできるのは、環境変数 DREAM_KEY と同じ「あいことば」を送ってきた端末だけ。
+// 環境変数 GITHUB_TOKEN があれば、夢が変わるたびに GitHub のリポジトリにも Markdown で控えを置く。
 
 import { getStore } from "@netlify/blobs";
 
@@ -12,6 +13,81 @@ const HEADERS = {
   "access-control-allow-headers": "content-type, x-dream-key",
   "access-control-allow-methods": "GET, POST, OPTIONS",
 };
+
+// ---- GitHub への控え ----
+// 置き場所は環境変数で変えられる。なければ dream-note-private の dreams.md。
+const GH_REPO = process.env.GITHUB_REPO || "hirominemoto/dream-note-private";
+const GH_PATH = process.env.GITHUB_PATH || "dreams.md";
+
+// 画面の「Markdownで書き出す」と同じ形にそろえる
+function markdownText(d) {
+  const title = String(d.title || "タイトルなし").replace(/\r?\n/g, " ");
+  const lines = ["# " + title, "", "見た日：" + (d.date || "不明")];
+  if (d.people) lines.push("登場人物：" + d.people);
+  if (Array.isArray(d.tags) && d.tags.length) lines.push("気分：" + d.tags.join("、"));
+  lines.push("", "## 夢の内容", "", String(d.body || ""));
+  return lines.join("\n");
+}
+
+function markdownAll(dreams) {
+  const ordered = dreams.slice().sort(
+    (a, b) => (a.date || "").localeCompare(b.date || "") || (a.created || 0) - (b.created || 0)
+  );
+  return "# 夢のノート\n\n全" + ordered.length + "件\n\n---\n\n" +
+    ordered.map(markdownText).join("\n\n---\n\n") + "\n";
+}
+
+async function hashOf(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Buffer.from(buf).toString("hex");
+}
+
+// 前回 GitHub に置いた中身と違うときだけ書き込む。
+// 失敗しても夢の保存（同期）は止めない。次の同期でもう一度試す。
+async function saveToGitHub(store, dreams) {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) return "off";
+  const md = markdownAll(dreams);
+  const hash = await hashOf(md);
+  if ((await store.get("github-hash")) === hash) return "same";
+
+  const url = `https://api.github.com/repos/${GH_REPO}/contents/${encodeURI(GH_PATH)}`;
+  const headers = {
+    authorization: `Bearer ${token}`,
+    accept: "application/vnd.github+json",
+    "x-github-api-version": "2022-11-28",
+    "user-agent": "dream-note",
+  };
+  for (let tries = 0; tries < 2; tries++) {
+    // いまある dreams.md の版（sha）を聞いてから上書きする。まだなければ新しく作る。
+    const cur = await fetch(url, { headers });
+    let sha;
+    if (cur.ok) sha = (await cur.json()).sha;
+    else if (cur.status !== 404) {
+      console.log("GitHub read failed", cur.status, await cur.text());
+      return "error";
+    }
+    const put = await fetch(url, {
+      method: "PUT",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({
+        message: "夢のノートを更新（" + dreams.length + "件）",
+        content: Buffer.from(md, "utf-8").toString("base64"),
+        ...(sha ? { sha } : {}),
+      }),
+    });
+    if (put.ok) {
+      await store.set("github-hash", hash);
+      return "saved";
+    }
+    // 別の端末とほぼ同時に書いたときは版がずれるので、もう一度だけ試す
+    if (put.status !== 409 && put.status !== 422) {
+      console.log("GitHub write failed", put.status, await put.text());
+      return "error";
+    }
+  }
+  return "error";
+}
 
 function reply(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: HEADERS });
@@ -57,7 +133,14 @@ export default async (req) => {
 
   const next = { dreams: [...byId.values()], deleted: [...deleted] };
   await store.setJSON("dreams", next);
-  return reply(next);
+
+  let github = "error";
+  try {
+    github = await saveToGitHub(store, next.dreams);
+  } catch (e) {
+    console.log("GitHub save error", e);
+  }
+  return reply({ ...next, github });
 };
 
 export const config = { path: "/api/dreams" };
