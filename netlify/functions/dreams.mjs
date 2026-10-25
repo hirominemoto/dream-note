@@ -131,6 +131,13 @@ export default async (req) => {
   }
   for (const id of deleted) byId.delete(id);
 
+  // 消した夢の「事実カード」（名前や原文の抜き出し）も、いっしょに片づける
+  const removed = (Array.isArray(body.delete) ? body.delete : []).filter((id) => typeof id === "string");
+  if (removed.length) {
+    const cardStore = getStore({ name: "dream-cards", consistency: "strong" });
+    await Promise.all(removed.map((id) => cardStore.delete(id).catch((e) => console.log("card delete error", e))));
+  }
+
   const next = { dreams: [...byId.values()], deleted: [...deleted] };
   await store.setJSON("dreams", next);
 

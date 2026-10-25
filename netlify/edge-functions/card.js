@@ -171,11 +171,22 @@ export default async (req) => {
 
   const store = getStore({ name: "dream-cards", consistency: "strong" });
 
-  // 保管してあるカードを全部返す（夢の id → カード）
+  // 保管してあるカードを全部返す（夢の id → カード）。
+  // 消した夢のカードが残っていたら、返さずにここで片づける。
   if (req.method === "GET") {
+    const notes = getStore({ name: "dream-note", consistency: "strong" });
+    const data = (await notes.get("dreams", { type: "json" })) || { dreams: [], deleted: [] };
+    // まだ同期されていない新しい夢のカードは消さないように、「消した印」がある夢だけを片づける
+    const gone = new Set(data.deleted || []);
     const { blobs } = await store.list();
     const entries = await Promise.all(
-      blobs.map(async (b) => [b.key, await store.get(b.key, { type: "json" })])
+      blobs.map(async (b) => {
+        if (gone.has(b.key)) {
+          await store.delete(b.key).catch((e) => console.log("card delete error", e));
+          return [b.key, null];
+        }
+        return [b.key, await store.get(b.key, { type: "json" })];
+      })
     );
     const cards = {};
     for (const [k, v] of entries) if (v) cards[k] = v;

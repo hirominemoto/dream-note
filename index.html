@@ -1158,6 +1158,17 @@ button {
     }
   }
 
+  // 手元にない夢（消した夢）のカードは、この端末からも片づける
+  function pruneCards() {
+    var ids = {};
+    dreams.forEach(function (d) { ids[d.id] = true; });
+    var changed = false;
+    Object.keys(cards).forEach(function (id) {
+      if (!ids[id]) { delete cards[id]; changed = true; }
+    });
+    if (changed) saveCards();
+  }
+
   function saveCards() {
     try { localStorage.setItem(CARDS_KEY, JSON.stringify(cards)); } catch (e) {}
   }
@@ -1208,9 +1219,11 @@ button {
       var got = data.cards || {};
       Object.keys(got).forEach(function (id) {
         var c = got[id];
+        if (find(id) === -1) return;
         if (c && c.card && (!cards[id] || (c.at || 0) >= (cards[id].at || 0))) cards[id] = c;
       });
       saveCards();
+      pruneCards();
     });
   }
 
@@ -1303,6 +1316,7 @@ button {
   var RESULTS = [['解決できた', 'res-ok'], ['解決できなかった', 'res-ng'], ['結果不明', 'res-unknown']];
 
   function renderSummary() {
+    pruneCards();
     var box = $('#summary-body');
     box.textContent = '';
     if (!summaryOpen) return;
