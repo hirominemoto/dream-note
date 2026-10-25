@@ -1280,9 +1280,13 @@ button {
         return next();
       })
       .then(function () {
-        setSummaryStatus('ok', todo.length
+        var msg = todo.length
           ? '新しく' + todo.length + '件の夢をカードにしました。'
-          : 'すべての夢がカードになっています。');
+          : 'すべての夢がカードになっています。';
+        setSummaryStatus('busy', msg + 'GitHubに控えを置いています…');
+        return saveSummary().then(function (gh) {
+          setSummaryStatus('ok', msg + gh);
+        });
       })
       .catch(function (e) {
         var msg = e instanceof TypeError
@@ -1314,58 +1318,36 @@ button {
     ['tech', 'AI・IT・作業']
   ];
   var RESULTS = [['解決できた', 'res-ok'], ['解決できなかった', 'res-ng'], ['結果不明', 'res-unknown']];
+  var SCENES = [
+    ['changes', '変化・すり替わり', '何かが別のものに変わる場面は見つかりませんでした。',
+      function (x) { return x.before + ' → ' + x.after; }],
+    ['notReal', 'できたと思ったら夢だった', '現実だと思ったら夢だった場面は見つかりませんでした。',
+      function (x) { return x.what; }]
+  ];
 
-  function renderSummary() {
+  function dreamLabel(d) {
+    return fmtDate(d.date) + (d.title ? '「' + d.title + '」' : '');
+  }
+
+  // カードを数えて、画面とMarkdownの両方で使う形にまとめる
+  function collect() {
     pruneCards();
-    var box = $('#summary-body');
-    box.textContent = '';
-    if (!summaryOpen) return;
-    $('#summary').hidden = false;
-
     var ordered = dreams.slice().sort(function (a, b) {
       return (a.date || '').localeCompare(b.date || '') || (a.created || 0) - (b.created || 0);
     });
     var withCard = ordered.filter(fresh);
-    var missing = ordered.length - withCard.length;
-
-    function dreamLabel(d) {
-      return fmtDate(d.date) + (d.title ? '「' + d.title + '」' : '');
-    }
-    function addQuote(parent, q) {
-      if (q) parent.appendChild(el('p', 'quote', '「' + q + '」'));
-    }
-    function heading(text, n) {
-      var h = el('h3', null, text);
-      if (n != null) h.appendChild(el('span', 'fact-count', n + '件の夢'));
-      box.appendChild(h);
-    }
-    function nothing(text) { box.appendChild(el('p', 'nothing', text)); }
-
-    box.appendChild(el('p', 'summary-meta', withCard.length + ' / ' + ordered.length + '件の夢がカードになっています' +
-      (missing ? '（残り' + missing + '件は「AIで整理する」でカードになります）' : '')));
+    var out = { total: ordered.length, carded: withCard.length };
 
     // 気分：記録されたタグをそのまま数える（AIなし）
-    heading('目が覚めたときに残っている感じ');
     var moods = {};
     ordered.forEach(function (d) {
       (d.tags || []).forEach(function (t) { moods[t] = (moods[t] || 0) + 1; });
     });
-    var moodNames = Object.keys(moods).sort(function (a, b) { return moods[b] - moods[a]; });
-    if (!moodNames.length) {
-      nothing('まだ記録されていません。');
-    } else {
-      var mt = el('div', 'tally');
-      moodNames.forEach(function (t) {
-        var chip = el('span', null, t);
-        chip.appendChild(el('b', null, moods[t] + '件'));
-        mt.appendChild(chip);
-      });
-      box.appendChild(mt);
-    }
-    if (!withCard.length) return;
+    out.moods = Object.keys(moods).sort(function (a, b) { return moods[b] - moods[a]; })
+      .map(function (t) { return { name: t, n: moods[t] }; });
 
     // 項目ごとに、同じ名前のものを束ねて数える（同じ夢は1件と数える）
-    GROUPS.forEach(function (g) {
+    out.groups = GROUPS.map(function (g) {
       var byName = {};
       var dreamsIn = 0;
       withCard.forEach(function (d) {
@@ -1379,21 +1361,77 @@ button {
           (byName[name] = byName[name] || []).push({ d: d, quote: it.quote });
         });
       });
-      heading(g[1], dreamsIn);
       var names = Object.keys(byName).sort(function (a, b) {
         return byName[b].length - byName[a].length;
+      }).map(function (name) { return { name: name, list: byName[name] }; });
+      return { label: g[1], dreamsIn: dreamsIn, names: names };
+    });
+
+    out.outcomes = [];
+    withCard.forEach(function (d) {
+      (cards[d.id].card.outcomes || []).forEach(function (o) { out.outcomes.push({ d: d, o: o }); });
+    });
+
+    out.scenes = SCENES.map(function (s) {
+      var list = [];
+      withCard.forEach(function (d) {
+        (cards[d.id].card[s[0]] || []).forEach(function (x) { list.push({ d: d, x: x }); });
       });
-      if (!names.length) { nothing('記録の中には見つかりませんでした。'); return; }
+      var n = {};
+      list.forEach(function (it) { n[it.d.id] = true; });
+      return { label: s[1], empty: s[2], text: s[3], dreamsIn: Object.keys(n).length, list: list };
+    });
+    return out;
+  }
+
+  function renderSummary() {
+    var box = $('#summary-body');
+    box.textContent = '';
+    if (!summaryOpen) return;
+    $('#summary').hidden = false;
+    var s = collect();
+    var missing = s.total - s.carded;
+
+    function addQuote(parent, q) {
+      if (q) parent.appendChild(el('p', 'quote', '「' + q + '」'));
+    }
+    function heading(text, n) {
+      var h = el('h3', null, text);
+      if (n != null) h.appendChild(el('span', 'fact-count', n + '件の夢'));
+      box.appendChild(h);
+    }
+    function nothing(text) { box.appendChild(el('p', 'nothing', text)); }
+
+    box.appendChild(el('p', 'summary-meta', s.carded + ' / ' + s.total + '件の夢がカードになっています' +
+      (missing ? '（残り' + missing + '件は「AIで整理する」でカードになります）' : '')));
+
+    heading('目が覚めたときに残っている感じ');
+    if (!s.moods.length) {
+      nothing('まだ記録されていません。');
+    } else {
+      var mt = el('div', 'tally');
+      s.moods.forEach(function (m) {
+        var chip = el('span', null, m.name);
+        chip.appendChild(el('b', null, m.n + '件'));
+        mt.appendChild(chip);
+      });
+      box.appendChild(mt);
+    }
+    if (!s.carded) return;
+
+    s.groups.forEach(function (g) {
+      heading(g.label, g.dreamsIn);
+      if (!g.names.length) { nothing('記録の中には見つかりませんでした。'); return; }
       var ul = el('ul', 'facts');
-      names.forEach(function (name) {
+      g.names.forEach(function (nm) {
         var li = el('li');
         var det = el('details');
         var sum = el('summary', 'fact-head');
-        sum.appendChild(el('span', 'fact-label', name));
-        sum.appendChild(el('span', 'fact-count', byName[name].length + '件'));
+        sum.appendChild(el('span', 'fact-label', nm.name));
+        sum.appendChild(el('span', 'fact-count', nm.list.length + '件'));
         det.appendChild(sum);
         var ev = el('ul', 'evidence');
-        byName[name].forEach(function (x) {
+        nm.list.forEach(function (x) {
           var item = el('li');
           item.appendChild(el('span', 'fact-dream', dreamLabel(x.d)));
           addQuote(item, x.quote);
@@ -1406,18 +1444,13 @@ button {
       box.appendChild(ul);
     });
 
-    // 問題と結果
-    var outcomes = [];
-    withCard.forEach(function (d) {
-      (cards[d.id].card.outcomes || []).forEach(function (o) { outcomes.push({ d: d, o: o }); });
-    });
     heading('問題と結果');
-    if (!outcomes.length) {
+    if (!s.outcomes.length) {
       nothing('問題への対処が描かれた記録は見つかりませんでした。');
     } else {
       var tally = el('div', 'tally');
       RESULTS.forEach(function (k) {
-        var n = outcomes.filter(function (x) { return x.o.result === k[0]; }).length;
+        var n = s.outcomes.filter(function (x) { return x.o.result === k[0]; }).length;
         var chip = el('span', null, k[0]);
         chip.appendChild(el('b', null, n + '件'));
         tally.appendChild(chip);
@@ -1425,7 +1458,7 @@ button {
       box.appendChild(tally);
       var ol = el('ul', 'facts');
       RESULTS.forEach(function (k) {
-        outcomes.filter(function (x) { return x.o.result === k[0]; }).forEach(function (x) {
+        s.outcomes.filter(function (x) { return x.o.result === k[0]; }).forEach(function (x) {
           var li = el('li');
           var head = el('div', 'fact-head');
           head.appendChild(el('span', 'pill ' + k[1], k[0]));
@@ -1439,34 +1472,83 @@ button {
       box.appendChild(ol);
     }
 
-    // 変化・すり替わり／できたと思ったら夢だった
-    function scenes(key, title, empty, text) {
-      var list = [];
-      withCard.forEach(function (d) {
-        (cards[d.id].card[key] || []).forEach(function (x) { list.push({ d: d, x: x }); });
-      });
-      var n = {};
-      list.forEach(function (s) { n[s.d.id] = true; });
-      heading(title, Object.keys(n).length);
-      if (!list.length) { nothing(empty); return; }
+    s.scenes.forEach(function (sc) {
+      heading(sc.label, sc.dreamsIn);
+      if (!sc.list.length) { nothing(sc.empty); return; }
       var ul = el('ul', 'facts');
-      list.forEach(function (s) {
+      sc.list.forEach(function (it) {
         var li = el('li');
-        li.appendChild(el('span', 'fact-dream', dreamLabel(s.d)));
-        li.appendChild(el('p', 'fact-text', text(s.x)));
-        addQuote(li, s.x.quote);
+        li.appendChild(el('span', 'fact-dream', dreamLabel(it.d)));
+        li.appendChild(el('p', 'fact-text', sc.text(it.x)));
+        addQuote(li, it.x.quote);
         ul.appendChild(li);
       });
       box.appendChild(ul);
-    }
-    scenes('changes', '変化・すり替わり', '何かが別のものに変わる場面は見つかりませんでした。',
-      function (x) { return x.before + ' → ' + x.after; });
-    scenes('notReal', 'できたと思ったら夢だった', '現実だと思ったら夢だった場面は見つかりませんでした。',
-      function (x) { return x.what; });
+    });
 
     box.appendChild(el('p', 'summary-note',
       'AIが夢を1件ずつ読んで抜き出したものです。名前の書き方が違うと別々に数えられることがあるので、' +
       '全体をじっくり眺めたいときは「Markdownで書き出す」でNotebookLMに読ませてみてね。'));
+  }
+
+  // 整理の結果をMarkdownにする（GitHubの summary.md に置く中身）。日時は窓口の側で足す。
+  function summaryMarkdown() {
+    var s = collect();
+    var L = [];
+    function q(t) { return t ? '「' + String(t).replace(/\r?\n/g, ' ') + '」' : ''; }
+    L.push('カードになった夢：' + s.carded + ' / ' + s.total + '件', '');
+    L.push('## 目が覚めたときに残っている感じ', '');
+    if (!s.moods.length) L.push('まだ記録されていません。');
+    s.moods.forEach(function (m) { L.push('- ' + m.name + '：' + m.n + '件'); });
+    s.groups.forEach(function (g) {
+      L.push('', '## ' + g.label + '（' + g.dreamsIn + '件の夢）', '');
+      if (!g.names.length) { L.push('記録の中には見つかりませんでした。'); return; }
+      g.names.forEach(function (nm) {
+        L.push('- **' + nm.name + '**（' + nm.list.length + '件）');
+        nm.list.forEach(function (x) { L.push('  - ' + dreamLabel(x.d) + '：' + q(x.quote)); });
+      });
+    });
+    L.push('', '## 問題と結果', '');
+    if (!s.outcomes.length) {
+      L.push('問題への対処が描かれた記録は見つかりませんでした。');
+    } else {
+      RESULTS.forEach(function (k) {
+        var list = s.outcomes.filter(function (x) { return x.o.result === k[0]; });
+        L.push('### ' + k[0] + '（' + list.length + '件）', '');
+        list.forEach(function (x) {
+          L.push('- ' + dreamLabel(x.d));
+          L.push('  - 問題：' + x.o.problem);
+          L.push('  - 行動：' + x.o.action);
+          if (x.o.quote) L.push('  - 根拠：' + q(x.o.quote));
+        });
+        L.push('');
+      });
+    }
+    s.scenes.forEach(function (sc) {
+      L.push('', '## ' + sc.label + '（' + sc.dreamsIn + '件の夢）', '');
+      if (!sc.list.length) { L.push(sc.empty); return; }
+      sc.list.forEach(function (it) {
+        L.push('- ' + dreamLabel(it.d) + '：' + sc.text(it.x) + (it.x.quote ? ' ' + q(it.x.quote) : ''));
+      });
+    });
+    return L.join('\n');
+  }
+
+  // GitHub に控えを置く。うまくいかなくても整理そのものは止めない。
+  function saveSummary() {
+    return fetch(API_BASE + '/api/summary-md', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-dream-key': encodeURIComponent(syncKey) },
+      body: JSON.stringify({ markdown: summaryMarkdown() })
+    }).then(readJSON).then(function (res) {
+      var g = res.data && res.data.github;
+      return g === 'saved' ? 'GitHubにも保存しました。'
+        : g === 'same' ? 'GitHubの控えは最新です。'
+        : g === 'off' ? ''
+        : 'GitHubへの保存はうまくいきませんでした。次に整理したときにもう一度試します。';
+    }, function () {
+      return 'GitHubへの保存はうまくいきませんでした。次に整理したときにもう一度試します。';
+    });
   }
 
   $('#sync-form').addEventListener('submit', function (e) {
