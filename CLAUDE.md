@@ -20,8 +20,9 @@
 
 ## このアプリで知っておくこと
 
-- ページは `index.html` 1枚。夢はブラウザ（localStorage）に保存され、Netlify Functions（`netlify/functions/dreams.mjs`）を通して Netlify Blobs の保管庫と同期する。「AIで整理する」は Netlify Edge Functions（`netlify/edge-functions/summary.js`）。
-- Netlify の環境変数は `DREAM_KEY`（同期のあいことば）、`ANTHROPIC_API_KEY`（AIで整理する）、`GITHUB_TOKEN`（GitHub への控え）。変えたら、デプロイし直すまで反映されない。秘密の値にすると「Same value for all deploy contexts」は選べないので、各デプロイ先の欄に同じ値を入れる。
+- ページは `index.html` 1枚。夢はブラウザ（localStorage）に保存され、Netlify Functions（`netlify/functions/dreams.mjs`、`/api/dreams`）を通して Netlify Blobs の保管庫と同期する。
+- 「AIで整理する」は、夢1件ずつの「事実カード」方式。Netlify Edge Functions（`netlify/edge-functions/card.js`、`/api/card`）が夢を1件ずつ AI に読ませてカードを作り、Blobs（`dream-cards`）に保管する。件数を数えるのはページ側（AIなし）。整理した結果の Markdown は `netlify/functions/summary-md.mjs`（`/api/summary-md`）が GitHub に控えとして置く。
+- Netlify の環境変数は `DREAM_KEY`（同期のあいことば）、`ANTHROPIC_API_KEY`（AIで整理する）、`GITHUB_TOKEN`（GitHub への控え）。控えの置き場所は `GITHUB_REPO`・`GITHUB_PATH`・`GITHUB_SUMMARY_PATH` で変えられる（なくてもよい）。変えたら、デプロイし直すまで反映されない。秘密の値にすると「Same value for all deploy contexts」は選べないので、各デプロイ先の欄に同じ値を入れる。
 - あいことばなどの秘密の値は、README やコミットに書かない。リポジトリは公開されていて、Netlify の秘密の値の検出（Exposed secrets detected）で公開も止まる。
 - プレビュー版（`deploy-preview-…`）は、いつものページとブラウザの保存場所が別。開いたら「同期の設定」であいことばを入れ直す必要がある。また、変更はマージするまでいつものページには出ない。
 - 公開から日が浅い npm パッケージは、Netlify のビルドで `No matching version found` になることがある。新しく入れる依存は、公開から十分たった版を選ぶ。
